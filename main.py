@@ -5,6 +5,20 @@ import matplotlib.dates as mdates
 pd.set_option('expand_frame_repr', False)  # 当列太多时显示不清楚
 pd.set_option('display.unicode.east_asian_width', True)  # 设置输出右对齐
 
+"""
+读取Excel文件中的数据。
+提取药品名称、规格和单位。
+选择需要的列：类型、入出库数量、库存量和操作日期。
+将“操作日期”列转换为日期格式。
+按照操作日期分组，计算每日的最低库存量。
+筛选出类型为"住院摆药"的记录，并计算每日的销量。
+合并每日最低库存和每日销量的数据。
+生成一个包含所有日期的序列。
+使用前一个有效值填充每日最低库存的缺失值。
+使用0填充每日销量的缺失值。
+计算近7日的日均销量。
+筛选出当日最低库存小于近1周的日均销量的相关信息。"""
+
 
 def process_excel(file_path):
     # 读取Excel文件
@@ -17,7 +31,7 @@ def process_excel(file_path):
 
     # 选择需要的列
     selected_columns = ['类型', '入出库数量', '库存量', '操作日期']
-    df = df[selected_columns]
+    df = df[selected_columns].copy()
 
     # 将“操作日期”列转换为日期格式
     df['操作日期'] = pd.to_datetime(df['操作日期']).dt.date
@@ -55,21 +69,24 @@ def process_excel(file_path):
     # merged_df['近1月的日均销量'] = merged_df['当日销量'].rolling(window=30, min_periods=1).mean()
 
     # 筛选出当日最低库存小于近1周的日均销量的相关信息
-    filtered_df = merged_df[merged_df['当日最低库存'] < merged_df['近1周的日均销量']]
-
-    # 显示筛选后的数据
-    print(f'药品名称：{drug_name}，规格：{drug_specifications},单位：{unit}')
-    print(filtered_df.head())
-
-    # TODO 将短缺情况输出到Excel中
+    filtered_df = merged_df[merged_df['当日最低库存'] < merged_df['近1周的日均销量']].copy()
 
     if not filtered_df.empty:
+        # 补充原始数据中的部分信息,以便输出到Excel中进行后续分析
+        filtered_df['药品名称'] = drug_name
+        filtered_df['规格'] = drug_specifications
+        filtered_df['单位'] = unit
+
+        print('短缺记录如下：')
+        print(filtered_df)
+        # TODO 将短缺情况输出到Excel中
+
         # 设置matplotlib字体为通用字体
         plt.rcParams['font.sans-serif'] = ['SimHei']
         plt.rcParams['axes.unicode_minus'] = False
 
         # 绘制当日最低库存的柱状图
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=(16, 7))
         plt.bar(merged_df['操作日期'], merged_df['当日最低库存'], color='lightblue', label='当日最低库存')
 
         # 绘制折线图
@@ -93,6 +110,8 @@ def process_excel(file_path):
         # 显示图表
         plt.tight_layout()
         plt.show()
+    else:
+        print(f'{drug_name} {drug_specifications} 无短缺记录！')
 
 
 if __name__ == '__main__':
