@@ -4,8 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
-from config import directory_path
-from config import export_path
+from config import directory_path, export_path, logger, error_logger
 
 pd.set_option('expand_frame_repr', False)  # 当列太多时显示不清楚
 pd.set_option('display.unicode.east_asian_width', True)  # 设置输出右对齐
@@ -68,11 +67,11 @@ def process_excel(file_path):
         shortage_df['规格'] = drug_specifications
         shortage_df['单位'] = unit
 
-        print('短缺记录如下：')
-        print(shortage_df)
-
         # 将短缺记录以追加方式输出到Excel中
         export_records(shortage_df, export_path, 'shortage_records.xlsx')
+
+        # 日志记录
+        logger.info(f"\n{drug_name} {drug_specifications}短缺记录如下：\n{shortage_df}")
 
         # 设置matplotlib字体为通用字体
         plt.rcParams['font.sans-serif'] = ['SimHei']
@@ -115,26 +114,11 @@ def process_excel(file_path):
         random_df['规格'] = drug_specifications
         random_df['单位'] = unit
 
-        print(f'无短缺记录，随机输出5条记录：')
-        print(random_df)
-
         # 将随机的非短缺记录以追加方式输出到Excel中
         export_records(random_df, export_path, 'random_non_shortage_records.xlsx')
 
-
-def traverse_directory(directory_path):
-    for filename in os.listdir(directory_path):
-        file_path = os.path.join(directory_path, filename)
-        process_excel(file_path)
-
-        # if os.path.isfile(file_path):
-        #     user_input = input("是否处理此文件？(y/n): ")
-        #     if user_input.lower() == 'y':
-        #         process_excel(file_path)
-        #     elif user_input.lower() == 'n':
-        #         print(f"跳过文件：{filename}")
-        #     else:
-        #         print("无效输入，请输入 y 或 n。")
+        # 日志记录
+        logger.info(f"\n{drug_name} {drug_specifications}无短缺记录，随机输出5条记录：\n{random_df}")
 
 
 def export_records(df, export_path, export_file_name):
@@ -143,23 +127,26 @@ def export_records(df, export_path, export_file_name):
     # 导出文件命名
     export_file = rf'{export_path}/{export_file_name}'
 
-    # 检查文件是否存在
-    if not os.path.exists(export_file):
-        # 如果文件不存在，则创建一个新的Excel文件
-        with pd.ExcelWriter(export_file, mode='w', engine='openpyxl') as writer:
-            df.to_excel(writer, index=False)
-    else:
-        # 如果文件已存在，则进行追加
-        with pd.ExcelWriter(export_file, mode='a', engine='openpyxl', if_sheet_exists='overlay') as writer:
-            # 读取已有文件的行数
-            last_row = pd.read_excel(export_file, header=None).shape[0]
-            # 判断是否保留标题行
-            if last_row > 0:
-                # 说明已经有数据了，不需要再保留标题行
-                df.to_excel(writer, index=False, header=False, startrow=last_row)
-            else:
-                # 说明没有数据，需要保留标题行
-                df.to_excel(writer, index=False, header=True, startrow=last_row)
+    try:
+        # 检查文件是否存在
+        if not os.path.exists(export_file):
+            # 如果文件不存在，则创建一个新的Excel文件
+            with pd.ExcelWriter(export_file, mode='w', engine='openpyxl') as writer:
+                df.to_excel(writer, index=False)
+        else:
+            # 如果文件已存在，则进行追加
+            with pd.ExcelWriter(export_file, mode='a', engine='openpyxl', if_sheet_exists='overlay') as writer:
+                # 读取已有文件的行数
+                last_row = pd.read_excel(export_file, header=None).shape[0]
+                # 判断是否保留标题行
+                if last_row > 0:
+                    # 说明已经有数据了，不需要再保留标题行
+                    df.to_excel(writer, index=False, header=False, startrow=last_row + 1)
+                else:
+                    # 说明没有数据，需要保留标题行
+                    df.to_excel(writer, index=False, header=True, startrow=last_row + 1)
+    except Exception as e:
+        error_logger.error("导出记录失败: {}", e)
 
 
 def export_img(drug_name, drug_specifications):
@@ -180,4 +167,6 @@ def export_img(drug_name, drug_specifications):
 
 
 if __name__ == '__main__':
-    traverse_directory(directory_path)
+    for filename in os.listdir(directory_path):
+        file_path = os.path.join(directory_path, filename)
+        process_excel(file_path)
