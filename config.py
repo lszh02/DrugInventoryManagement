@@ -9,9 +9,11 @@ app_log_path = os.path.join(export_path, "app.log")
 error_log_path = os.path.join(export_path, "errors.log")
 
 # 配置应用日志格式和输出
-logger = loguru.logger
-logger.add(app_log_path, format="{time} | {level} | {message}")
+app_logger = loguru.logger
+app_logger.add(app_log_path, format="{time} | {level} | {message}",
+               filter=lambda record: record["level"].name == "INFO")
 
 # 配置错误日志格式和输出
 error_logger = loguru.logger
-error_logger.add(error_log_path, format="{time} | {level} | {message}")
+error_logger.add(error_log_path, format="{time} | {level} | {message}",
+                 filter=lambda record: record["level"].name == "ERROR" or record["level"].name == "CRITICAL")

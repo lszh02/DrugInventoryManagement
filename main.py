@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
-from config import directory_path, export_path, logger, error_logger
+from config import directory_path, export_path, app_logger, error_logger
 
 pd.set_option('expand_frame_repr', False)  # 当列太多时显示不清楚
 pd.set_option('display.unicode.east_asian_width', True)  # 设置输出右对齐
@@ -71,7 +71,7 @@ def process_excel(file_path):
         export_records(shortage_df, export_path, 'shortage_records.xlsx')
 
         # 日志记录
-        logger.info(f"\n{drug_name} {drug_specifications}短缺记录如下：\n{shortage_df}")
+        app_logger.info(f"\n{drug_name} {drug_specifications}短缺记录如下：\n{shortage_df}")
 
         # 设置matplotlib字体为通用字体
         plt.rcParams['font.sans-serif'] = ['SimHei']
@@ -118,7 +118,7 @@ def process_excel(file_path):
         export_records(random_df, export_path, 'random_non_shortage_records.xlsx')
 
         # 日志记录
-        logger.info(f"\n{drug_name} {drug_specifications}无短缺记录，随机输出5条记录：\n{random_df}")
+        app_logger.info(f"\n{drug_name} {drug_specifications}无短缺记录，随机输出5条记录：\n{random_df}")
 
 
 def export_records(df, export_path, export_file_name):
