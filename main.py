@@ -1,3 +1,4 @@
+# encoding=utf-8
 import os
 
 import pandas as pd
@@ -39,7 +40,7 @@ def process_excel(file_path):
     # 合并每日最低库存和每日销量的数据
     merged_df = pd.merge(daily_min_stock, daily_sales, on='操作日期', how='outer')
 
-    # 将 '操作日期' 列转换为日期格式
+    # 将 '操作日期' 列转换为日期时间格式
     merged_df['操作日期'] = pd.to_datetime(merged_df['操作日期'])
 
     # 生成一个包含所有日期的序列，也是日期时间格式
@@ -48,6 +49,9 @@ def process_excel(file_path):
     # 直接将 '操作日期' 列作为键进行合并，因为现在两者都是日期时间格式
     merged_df = pd.merge(all_dates.to_frame(name='操作日期'), merged_df, on='操作日期', how='left')
 
+    # 将日期时间格式的 '操作日期' 列转换为日期格式
+    merged_df['操作日期'] = merged_df['操作日期'].dt.date
+
     # 使用前一个有效值填充每日最低库存的缺失值
     merged_df['当日最低库存'].fillna(method='ffill', inplace=True)
 
@@ -55,17 +59,18 @@ def process_excel(file_path):
     merged_df['当日销量'].fillna(0, inplace=True)
 
     # 计算近7日、30日的日均销量
-    merged_df['近1周的日均销量'] = merged_df['当日销量'].rolling(window=7, min_periods=1).mean()
-    merged_df['近1月的日均销量'] = merged_df['当日销量'].rolling(window=30, min_periods=1).mean()
+    merged_df['近7日的日均销量'] = merged_df['当日销量'].rolling(window=7, min_periods=1).mean().round(2)
+    # merged_df['近30日的日均销量'] = merged_df['当日销量'].rolling(window=30, min_periods=1).mean().round(2)
 
     # 筛选出短缺记录
-    shortage_df = merged_df[merged_df['当日最低库存'] < merged_df['近1周的日均销量']].copy()
+    shortage_df = merged_df[merged_df['当日最低库存'] < merged_df['近7日的日均销量']].copy()
 
     if not shortage_df.empty:
         # 补充原始数据中的部分信息,以便输出到Excel中进行后续分析
         shortage_df['药品名称'] = drug_name
         shortage_df['规格'] = drug_specifications
         shortage_df['单位'] = unit
+        shortage_df['源文件名'] = os.path.basename(file_path)
 
         # 将短缺记录以追加方式输出到Excel中
         export_records(shortage_df, export_path, 'shortage_records.xlsx')
@@ -83,8 +88,8 @@ def process_excel(file_path):
 
         # 绘制折线图
         plt.plot(merged_df['操作日期'], merged_df['当日销量'], color='red', label='当日销量')
-        plt.plot(merged_df['操作日期'], merged_df['近1周的日均销量'], color='orange', label='近1周的日均销量')
-        # plt.plot(merged_df['操作日期'], merged_df['近1月的日均销量'], color='blue', label='近1月的日均销量')
+        plt.plot(merged_df['操作日期'], merged_df['近7日的日均销量'], color='orange', label='近7日的日均销量')
+        # plt.plot(merged_df['操作日期'], merged_df['近30日的日均销量'], color='blue', label='近30日的日均销量')
 
         # 设置图表标题和坐标轴标签
         plt.title(f'{drug_name}库存与销量分析')
@@ -113,6 +118,7 @@ def process_excel(file_path):
         random_df['药品名称'] = drug_name
         random_df['规格'] = drug_specifications
         random_df['单位'] = unit
+        random_df['源文件名'] = os.path.basename(file_path)
 
         # 将随机的非短缺记录以追加方式输出到Excel中
         export_records(random_df, export_path, 'random_non_shortage_records.xlsx')
@@ -168,5 +174,7 @@ def export_img(drug_name, drug_specifications):
 
 if __name__ == '__main__':
     for filename in os.listdir(directory_path):
-        file_path = os.path.join(directory_path, filename)
-        process_excel(file_path)
+        # 获取所有的Excel文件
+        if filename.endswith('.xls') or filename.endswith('.xlsx'):
+            file_path = os.path.join(directory_path, filename)
+            process_excel(file_path)
