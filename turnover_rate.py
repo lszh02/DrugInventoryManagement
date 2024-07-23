@@ -11,7 +11,7 @@ pd.set_option('expand_frame_repr', False)  # 当列太多时显示不清楚
 pd.set_option('display.unicode.east_asian_width', True)  # 设置输出右对齐
 
 
-def process_excel(file_path):
+def process_excel(file_path, start_date, end_date):
     # 读取Excel文件
     df = pd.read_excel(file_path)
 
@@ -42,7 +42,7 @@ def process_excel(file_path):
         merged_df = pd.merge(daily_last_stock, daily_sales, on='操作日期', how='outer')
 
         # 生成一个包含所有日期的序列
-        all_dates = pd.date_range(start='2023-01-01', end='2023-12-31')
+        all_dates = pd.date_range(start=start_date, end=end_date)
 
         # 将 '操作日期' 列转换为日期时间格式,并作为键进行合并
         merged_df['操作日期'] = pd.to_datetime(merged_df['操作日期'])
@@ -57,7 +57,7 @@ def process_excel(file_path):
         # 使用0填充每日销量的缺失值
         merged_df['当日销量'].fillna(0, inplace=True)
 
-        # 根据前7日销量计算预期10日计划量
+        # 根据前7日销量和前28日销量来计算预期10日计划量
         merged_df['预期10日计划量'] = merged_df['当日销量'].rolling(window=7, min_periods=1).mean().round(2) * 10
 
         if not merged_df.empty:
@@ -123,4 +123,4 @@ if __name__ == '__main__':
         # 获取所有的Excel文件
         if filename.endswith('.xls') or filename.endswith('.xlsx'):
             file_path = os.path.join(directory_path, filename)
-            process_excel(file_path)
+            process_excel(file_path, '2024-01-01', '2024-6-30')
