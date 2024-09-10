@@ -10,16 +10,13 @@ pd.set_option('expand_frame_repr', False)  # 当列太多时显示不清楚
 pd.set_option('display.unicode.east_asian_width', True)  # 设置输出右对齐
 
 
-def process_excel(file_path, start_date='', end_date=''):
+def process_excel(file_path, start_date=None, end_date=None):
     # 读取Excel文件
     df = pd.read_excel(file_path)
 
-    # 获取药品名称、规格、单位、厂家
-    drug_name = df['药品名称'].loc[0]
-    drug_specifications = df['规格'].loc[0]
-    unit = df['单位'].loc[0]
-    manufacturer = df['厂家'].loc[0]
-    print(f"药品名称: {drug_name}, 规格: {drug_specifications}, 单位: {unit}, 厂家: {manufacturer}")
+    # 提取药品基本信息
+    basic_info = df[['药品名称', '规格', '单位', '厂家']].iloc[0]
+    app_logger.info(f"药品基本信息:\n{basic_info}")
 
     # 选择需要的列
     selected_columns = ['类型', '入出库数量', '库存量', '操作日期']
@@ -46,13 +43,15 @@ def process_excel(file_path, start_date='', end_date=''):
         merged_df = pd.merge(daily_sales, daily_last_stock, on='操作日期', how='outer')
         # print(merged_df.head())
 
-        # 生成一个包含所有日期的序列
-        if start_date and end_date:
-            all_dates = pd.date_range(start=start_date, end=end_date, freq='D')
-        else:
-            all_dates = pd.date_range(start=merged_df['操作日期'].min(), end=merged_df['操作日期'].max(), freq='D')
+        # 生成一个包含所有日期的序列(从开始日期到结束日期)
+        if start_date is None:
+            start_date = merged_df['操作日期'].min()
+        if end_date is None:
+            end_date = merged_df['操作日期'].max()
 
-        # 将 '操作日期' 列转换为日期时间格式,并作为键进行合并
+        all_dates = pd.date_range(start=start_date, end=end_date, freq='D')
+
+        # 将 '操作日期' 列转换为日期时间格式,才能作为键进行合并
         merged_df['操作日期'] = pd.to_datetime(merged_df['操作日期'])
         merged_df = pd.merge(all_dates.to_frame(name='操作日期'), merged_df, on='操作日期', how='left')
         # print(merged_df.head())
@@ -72,37 +71,38 @@ def process_excel(file_path, start_date='', end_date=''):
         # print(merged_df.head())
 
         # 计算近7日累计销量
-        merged_df['近7日累计销量'] = merged_df['当日销量'].rolling(window=7, min_periods=1).sum()
+        merged_df['近10日累计销量'] = merged_df['当日销量'].rolling(window=10, min_periods=1).sum()
         # print(merged_df.head(15))
 
-        # 计算merged_df中近5日累计销量这一列数值的中位数和95百分位数
-        percentile_50_5 = merged_df['近5日累计销量'].quantile(0.5)
+        # 计算merged_df中近5日累计销量的95百分位数
         percentile_95_5 = merged_df['近5日累计销量'].quantile(0.95)
-        # print(f"近5日累计销量中位数: {percentile_50_5}")
         # print(f"近5日累计销量95百分位: {percentile_95_5}")
 
-        # 计算merged_df中近7日累计销量这一列数值的中位数和95百分位数
-        percentile_50_7 = merged_df['近7日累计销量'].quantile(0.5)
-        percentile_95_7 = merged_df['近7日累计销量'].quantile(0.95)
-        # print(f"近7日累计销量中位数: {percentile_50_7}")
-        # print(f"近7日累计销量95百分位: {percentile_95_7}")
+        # 计算merged_df中近10日累计销量的95百分位数
+        percentile_95_10 = merged_df['近10日累计销量'].quantile(0.95)
+        # print(f"近10日累计销量95百分位: {percentile_95_10}")
+
+        # 计算merged_df中当日销量的相对标准差
+        relative_std = merged_df['当日销量'].std() / merged_df['当日销量'].mean()
 
         if not merged_df.empty:
+            print("*" * 10, basic_info['药品名称'], basic_info['规格'], percentile_95_5, percentile_95_10,
+                  round(relative_std, 2), "*" * 10)
             # 画图
-            # draw_a_graph(merged_df, drug_name, unit)
+            draw_a_graph(merged_df, basic_info['药品名称'], basic_info['规格'], percentile_95_5, percentile_95_10, )
             # 导出图片
-            # export_img(drug_name, drug_specifications)
+            export_img(basic_info['药品名称'], basic_info['规格'])
             # 导出数据到Excel文件
-            # export_to_excel(merged_df, drug_name, drug_specifications)
+            # export_to_excel(merged_df, basic_info['药品名称'], basic_info['规格'])
+            return {'药品名称': basic_info['药品名称'], '规格': basic_info['规格'],
+                    '近5日累计销量95百分位数': percentile_95_5, '近10日累计销量95百分位数': percentile_95_10,
+                    '相对标准差': round(relative_std, 2)}
 
-            return {'药品名称': drug_name, '规格': drug_specifications, '近5日累计销量中位数': percentile_50_5,
-                    '近5日累计销量95百分位数': percentile_95_5, '近7日累计销量中位数': percentile_50_7,
-                    '近7日累计销量95百分位数': percentile_95_7}
     else:
-        print(f"{drug_name}没有住院摆药记录")
+        print(f"{basic_info['药品名称']}_{basic_info['规格']}没有住院摆药记录")
 
 
-def draw_a_graph(df, drug_name, unit):
+def draw_a_graph(df, drug_name, unit, percentile_95_5, percentile_95_10):
     # 设置matplotlib字体为通用字体
     plt.rcParams['font.sans-serif'] = ['SimHei']
     plt.rcParams['axes.unicode_minus'] = False
@@ -113,8 +113,10 @@ def draw_a_graph(df, drug_name, unit):
 
     # 绘制折线图
     plt.plot(df['操作日期'], df['当日销量'], color='red', label='当日销量')
-    plt.plot(df['操作日期'], df['近5日累计销量'], color='blue', label='近5日累计销量')
-    plt.plot(df['操作日期'], df['近7日累计销量'], color='green', label='近7日累计销量')
+    plt.plot(df['操作日期'], df['近5日累计销量'], color='orange', label='近5日累计销量')
+    plt.plot(df['操作日期'], df['近10日累计销量'], color='green', label='近10日累计销量')
+    plt.axhline(y=percentile_95_5, color='blue', linestyle='--', label='拟设下限')
+    plt.axhline(y=percentile_95_10, color='purple', linestyle='--', label='拟设上限')
 
     # 设置图表标题和坐标轴标签
     plt.title(f'{drug_name}库存与销量分析（单位：{unit}）')
@@ -162,12 +164,11 @@ if __name__ == '__main__':
             if result:
                 results.append(result)
 
-    print('*'*20)
-    # print(results)
+    print('*' * 20)
+    print(results)
     # 将数据列表转换为DataFrame
-    df = pd.DataFrame.from_records(results)
-    print(df)
-    # 将DataFrame写入Excel文件，不包括索引号
-    export_xls_file = os.path.join(export_path, f"汇总.xlsx")
-    df.to_excel(export_xls_file, index=False)
-
+    # df = pd.DataFrame.from_records(results)
+    # print(df)
+    # # 将DataFrame写入Excel文件，不包括索引号
+    # export_xls_file = os.path.join(export_path, f"汇总.xlsx")
+    # df.to_excel(export_xls_file, index=False)
