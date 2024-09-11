@@ -83,7 +83,8 @@ def process_excel(file_path, start_date=None, end_date=None):
         # print(f"近10日累计销量95百分位: {percentile_95_10}")
 
         # 计算merged_df中当日销量的相对标准差
-        daily_avg_sales = merged_df['当日销量'].mean()
+        daily_avg_stock = merged_df['日结库存'].mean()  # 日均库存
+        daily_avg_sales = merged_df['当日销量'].mean()  # 日均销量
         relative_std = merged_df['当日销量'].std() / daily_avg_sales
 
         if not merged_df.empty:
@@ -99,7 +100,11 @@ def process_excel(file_path, start_date=None, end_date=None):
                     '日均销量': round(daily_avg_sales, 2),
                     '拟设下限': round(percentile_95_5, 2),
                     '拟设上限': round(percentile_95_10, 2),
-                    '相对标准差': round(relative_std, 2)}
+                    '相对标准差': round(relative_std, 2),
+                    '库存天数': round(daily_avg_stock / daily_avg_sales, 2),
+                    '是否合理': '合理' if percentile_95_5 < merged_df['日结库存'].max() < percentile_95_10 else '不合理',
+                    '起始日期': merged_df['操作日期'].min(),
+                    '结束日期': merged_df['操作日期'].max()}
 
     else:
         print(f"{basic_info['药品名称']}_{basic_info['规格']}没有住院摆药记录!")
@@ -118,8 +123,13 @@ def draw_a_graph(df, drug_name, unit, percentile_95_5, percentile_95_10):
     plt.plot(df['操作日期'], df['当日销量'], color='red', label='当日销量')
     plt.plot(df['操作日期'], df['近5日累计销量'], color='orange', label='近5日累计销量')
     plt.plot(df['操作日期'], df['近10日累计销量'], color='green', label='近10日累计销量')
+
+    # 绘制拟设下限和拟设上限的虚线
     plt.axhline(y=percentile_95_5, color='blue', linestyle='--', label='拟设下限')
     plt.axhline(y=percentile_95_10, color='purple', linestyle='--', label='拟设上限')
+    # 在水平线上方添加文本标签
+    # plt.text(percentile_95_5, percentile_95_5 + 0.1, f'{percentile_95_5:.2f}', ha='center', va='bottom', color='blue')
+    # plt.text(percentile_95_10, percentile_95_10 + 0.1, f'{percentile_95_10:.2f}', ha='center', va='bottom', color='purple')
 
     # 设置图表标题和坐标轴标签
     plt.title(f'{drug_name}库存与销量分析（单位：{unit}）')
