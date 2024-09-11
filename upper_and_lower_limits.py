@@ -16,7 +16,7 @@ def process_excel(file_path, start_date=None, end_date=None):
 
     # 提取药品基本信息
     basic_info = df[['药品名称', '规格', '单位', '厂家']].iloc[0]
-    app_logger.info(f"药品基本信息:\n{basic_info}")
+    app_logger.info(f"提取药品基本信息:\n{basic_info}")
 
     # 选择需要的列
     selected_columns = ['类型', '入出库数量', '库存量', '操作日期']
@@ -83,23 +83,26 @@ def process_excel(file_path, start_date=None, end_date=None):
         # print(f"近10日累计销量95百分位: {percentile_95_10}")
 
         # 计算merged_df中当日销量的相对标准差
-        relative_std = merged_df['当日销量'].std() / merged_df['当日销量'].mean()
+        daily_avg_sales = merged_df['当日销量'].mean()
+        relative_std = merged_df['当日销量'].std() / daily_avg_sales
 
         if not merged_df.empty:
-            print("*" * 10, basic_info['药品名称'], basic_info['规格'], percentile_95_5, percentile_95_10,
-                  round(relative_std, 2), "*" * 10)
             # 画图
             draw_a_graph(merged_df, basic_info['药品名称'], basic_info['规格'], percentile_95_5, percentile_95_10, )
             # 导出图片
             export_img(basic_info['药品名称'], basic_info['规格'])
-            # 导出数据到Excel文件
-            # export_to_excel(merged_df, basic_info['药品名称'], basic_info['规格'])
-            return {'药品名称': basic_info['药品名称'], '规格': basic_info['规格'],
-                    '近5日累计销量95百分位数': percentile_95_5, '近10日累计销量95百分位数': percentile_95_10,
+
+            return {'药品名称': basic_info['药品名称'],
+                    '规格': basic_info['规格'],
+                    '单位': basic_info['单位'],
+                    '厂家': basic_info['厂家'],
+                    '日均销量': round(daily_avg_sales, 2),
+                    '拟设下限': round(percentile_95_5, 2),
+                    '拟设上限': round(percentile_95_10, 2),
                     '相对标准差': round(relative_std, 2)}
 
     else:
-        print(f"{basic_info['药品名称']}_{basic_info['规格']}没有住院摆药记录")
+        print(f"{basic_info['药品名称']}_{basic_info['规格']}没有住院摆药记录!")
 
 
 def draw_a_graph(df, drug_name, unit, percentile_95_5, percentile_95_10):
@@ -163,12 +166,11 @@ if __name__ == '__main__':
             # 如果结果不为空，则添加到结果列表中
             if result:
                 results.append(result)
+    app_logger.info(f"库存上下限:\n{results}")
 
-    print('*' * 20)
-    print(results)
     # 将数据列表转换为DataFrame
-    # df = pd.DataFrame.from_records(results)
-    # print(df)
-    # # 将DataFrame写入Excel文件，不包括索引号
-    # export_xls_file = os.path.join(export_path, f"汇总.xlsx")
-    # df.to_excel(export_xls_file, index=False)
+    df = pd.DataFrame.from_records(results)
+    # 将DataFrame写入Excel文件，不包括索引号
+    export_xls_file = os.path.join(export_path, f"药品库存上下限.xlsx")
+    df.to_excel(export_xls_file, index=False)
+    app_logger.info(f"导出文件: {export_xls_file}")
