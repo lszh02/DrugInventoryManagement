@@ -79,14 +79,14 @@ def process_excel(file_path, start_date=None, end_date=None):
         # 针对低价值的药品，设置库存上下限”
         inventory_cap_for_low_value_drugs = None
         inventory_floor_for_low_value_drugs = None
-        low_value_level1 = 100
-        low_value_level2 = 300
-        if basic_info['购入金额'] < low_value_level1 and daily_avg_sales * basic_info['购入金额'] < low_value_level1:
+        low_value_level1 = 1000
+        low_value_level2 = 3000
+        if percentile_95_10 * basic_info['购入金额'] < low_value_level1:
             inventory_cap_for_low_value_drugs = percentile_95_5 * 2
             inventory_floor_for_low_value_drugs = percentile_95_10 * 2
-        elif basic_info['购入金额'] < low_value_level2 and daily_avg_sales * basic_info['购入金额'] < low_value_level2:
-            inventory_cap_for_low_value_drugs = percentile_95_5 * 1.5
-            inventory_floor_for_low_value_drugs = percentile_95_10 * 2
+        # elif percentile_95_10 * basic_info['购入金额'] < low_value_level2:
+        #     inventory_cap_for_low_value_drugs = percentile_95_5 * 1.5
+        #     inventory_floor_for_low_value_drugs = percentile_95_10 * 2
 
         if not merged_df.empty:
             # 画图
@@ -181,17 +181,24 @@ def export_img(drug_name, drug_specifications):
 
 
 if __name__ == '__main__':
-    results = []
-    for filename in os.listdir(directory_path):
-        # 获取所有的Excel文件
-        if filename.endswith('.xls') or filename.endswith('.xlsx'):
-            file_path = os.path.join(directory_path, filename)
-            result = process_excel(file_path)
-            # 如果结果不为空，则添加到结果列表中
-            if result:
-                results.append(result)
-    app_logger.info(f"信息汇总（含库存上下限）:\n{results}")
+    # 获取所有文件
+    all_files = os.listdir(directory_path)
+    # 过滤出Excel文件
+    excel_files = [file for file in all_files if file.endswith(('.xlsx', '.xls'))]
+    # 按文件名中的数字部分排序
+    sorted_excel_files = sorted(excel_files, key=lambda x: int(x.split('.')[0]))
 
+    # 遍历所有Excel文件
+    results = []
+    for filename in sorted_excel_files:
+        file_path = os.path.join(directory_path, filename)
+        result = process_excel(file_path)
+        # 如果结果不为空，则添加到结果列表中
+        if result:
+            results.append(result)
+
+    # 将结果写入日志文件
+    app_logger.info(f"信息汇总（含库存上下限）:\n{results}")
     # 将数据列表转换为DataFrame
     df = pd.DataFrame.from_records(results)
     # 将DataFrame写入Excel文件，不包括索引号
