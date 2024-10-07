@@ -79,19 +79,22 @@ def process_excel(file_path, start_date=None, end_date=None):
         # 针对低价值的药品，设置库存上下限”
         inventory_cap_for_low_value_drugs = None
         inventory_floor_for_low_value_drugs = None
-        low_value_level1 = 1000
-        low_value_level2 = 3000
-        if percentile_95_10 * basic_info['购入金额'] < low_value_level1:
-            inventory_cap_for_low_value_drugs = percentile_95_5 * 2
+        low_value_level1 = 500
+        low_value_level2 = 1000
+        if abs(percentile_95_10 * basic_info['购入金额']) < low_value_level1:
+            inventory_cap_for_low_value_drugs = percentile_95_5 * 1.5
             inventory_floor_for_low_value_drugs = percentile_95_10 * 2
-        # elif percentile_95_10 * basic_info['购入金额'] < low_value_level2:
-        #     inventory_cap_for_low_value_drugs = percentile_95_5 * 1.5
-        #     inventory_floor_for_low_value_drugs = percentile_95_10 * 2
+        elif abs(percentile_95_10 * basic_info['购入金额']) < low_value_level2:
+            inventory_cap_for_low_value_drugs = percentile_95_5 * 1.2
+            inventory_floor_for_low_value_drugs = percentile_95_10 * 1.5
 
         if not merged_df.empty:
             # 画图
-            draw_a_graph(merged_df, basic_info['药品名称'], basic_info['规格'], percentile_95_5, percentile_95_10,
-                         relative_std, inventory_cap_for_low_value_drugs, inventory_floor_for_low_value_drugs)
+            draw_a_graph(merged_df, basic_info['药品名称'], basic_info['规格'], percentile_95_5=round(percentile_95_5, 2),
+                         percentile_95_10=round(percentile_95_10, 2), relative_std= round(relative_std, 2),
+                         inventory_cap_for_low_value_drugs= round(inventory_cap_for_low_value_drugs, 2) if inventory_cap_for_low_value_drugs else None,
+                         inventory_floor_for_low_value_drugs= round(inventory_floor_for_low_value_drugs, 2) if inventory_floor_for_low_value_drugs else None)
+
             # 导出图片
             export_img(basic_info['药品名称'], basic_info['规格'])
 
@@ -100,12 +103,8 @@ def process_excel(file_path, start_date=None, end_date=None):
                     '单位': basic_info['单位'],
                     '厂家': basic_info['厂家'],
                     '日均销量': round(daily_avg_sales, 2),
-                    '拟设下限': round(percentile_95_5, 2),
-                    '拟设上限': round(percentile_95_10, 2),
-                    '低值药品上限': round(inventory_cap_for_low_value_drugs,
-                                          2) if inventory_cap_for_low_value_drugs else None,
-                    '低值药品下限': round(inventory_floor_for_low_value_drugs,
-                                          2) if inventory_floor_for_low_value_drugs else None,
+                    '拟设上限': round(inventory_cap_for_low_value_drugs, 2) if inventory_cap_for_low_value_drugs else round(percentile_95_10, 2),
+                    '拟设下限': round(inventory_floor_for_low_value_drugs, 2) if inventory_floor_for_low_value_drugs else round(percentile_95_5, 2),
                     '相对标准差': round(relative_std, 2),
                     '库存天数': round(daily_avg_stock / daily_avg_sales, 2),
                     '起始日期': merged_df['操作日期'].min(),
@@ -115,8 +114,8 @@ def process_excel(file_path, start_date=None, end_date=None):
         print(f"{basic_info['药品名称']}_{basic_info['规格']}没有住院摆药记录!")
 
 
-def draw_a_graph(df, drug_name, unit, percentile_95_5, percentile_95_10, relative_std,
-                 inventory_cap_for_low_value_drugs=None, inventory_floor_for_low_value_drugs=None):
+def draw_a_graph(df, drug_name, unit, **kwargs):
+
     # 设置matplotlib字体为通用字体
     plt.rcParams['font.sans-serif'] = ['SimHei']
     plt.rcParams['axes.unicode_minus'] = False
@@ -131,18 +130,15 @@ def draw_a_graph(df, drug_name, unit, percentile_95_5, percentile_95_10, relativ
     plt.plot(df['操作日期'], df['近10日累计销量'], color='green', label='近10日累计销量')
 
     # 添加水平线
-    if inventory_cap_for_low_value_drugs:
-        plt.axhline(y=inventory_cap_for_low_value_drugs, color='blue', linestyle='--', label='低值药品上限')
+    if kwargs.get('inventory_cap_for_low_value_drugs'):
+        plt.axhline(y=kwargs.get('inventory_cap_for_low_value_drugs'), color='purple', linestyle='--', label='低值药品上限')
+        plt.axhline(y=kwargs.get('inventory_floor_for_low_value_drugs'), color='blue', linestyle='--', label='低值药品下限')
     else:
-        plt.axhline(y=percentile_95_10, color='purple', linestyle='--', label='拟设上限')
-
-    if inventory_floor_for_low_value_drugs:
-        plt.axhline(y=inventory_floor_for_low_value_drugs, color='purple', linestyle='--', label='低值药品下限')
-    else:
-        plt.axhline(y=percentile_95_5, color='blue', linestyle='--', label='拟设下限')
+        plt.axhline(y=kwargs.get('percentile_95_10'), color='purple', linestyle='--', label='拟设上限')
+        plt.axhline(y=kwargs.get('percentile_95_5'), color='blue', linestyle='--', label='拟设下限')
 
     # 显示相对标准差
-    plt.text(df['操作日期'].iloc[-1], df['日结库存'].iloc[-1], f'相对标准差：{relative_std:.2f}', ha='right',
+    plt.text(df['操作日期'].iloc[-1], df['日结库存'].iloc[-1], f'相对标准差：{kwargs.get("relative_std"):.2f}', ha='right',
              va='bottom')
 
     # 设置图表标题和坐标轴标签
