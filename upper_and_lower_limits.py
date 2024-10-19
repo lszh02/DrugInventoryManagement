@@ -1,4 +1,5 @@
 import os
+import time
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -11,12 +12,24 @@ pd.set_option('display.unicode.east_asian_width', True)  # 设置输出右对齐
 
 
 def process_excel(file_path, start_date=None, end_date=None):
+    """
+    处理Excel文件，计算药品的上下限
+    :param file_path: Excel文件路径
+    :param start_date: 开始日期
+    :param end_date: 结束日期
+    :return:
+    """
+
+    # 提取Excel文件名
+    file_name = os.path.basename(file_path)
+    app_logger.info(f"开始处理文件: {file_name}")
+
     # 读取Excel文件
     df = pd.read_excel(file_path)
 
     # 提取药品基本信息(基于最后一行数据)
     basic_info = df[['药品名称', '规格', '单位', '购入金额', '厂家']].iloc[-1]
-    app_logger.info(f"提取药品基本信息:\n{basic_info}")
+    # app_logger.info(f"提取药品基本信息:\n{basic_info}")
 
     # 选择需要的列
     selected_columns = ['类型', '入出库数量', '库存量', '操作日期']
@@ -76,46 +89,69 @@ def process_excel(file_path, start_date=None, end_date=None):
         daily_avg_sales = merged_df['当日销量'].mean()  # 日均销量
         relative_std = merged_df['当日销量'].std() / daily_avg_sales
 
-        # 针对低价值的药品，设置库存上下限”
-        inventory_cap_for_low_value_drugs = None
-        inventory_floor_for_low_value_drugs = None
-        low_value_level1 = 500
-        low_value_level2 = 1000
-        if abs(percentile_95_10 * basic_info['购入金额']) < low_value_level1:
-            inventory_cap_for_low_value_drugs = percentile_95_5 * 1.5
-            inventory_floor_for_low_value_drugs = percentile_95_10 * 2
-        elif abs(percentile_95_10 * basic_info['购入金额']) < low_value_level2:
-            inventory_cap_for_low_value_drugs = percentile_95_5 * 1.2
-            inventory_floor_for_low_value_drugs = percentile_95_10 * 1.5
+        # 计算用药天数占比
+        # merged_df['用药天数占比'] = merged_df['当日销量'].apply(lambda x: 1 if x > 0 else 0).rolling(window=5, min_periods=1).sum()
+
+        # 设置库存上下限
+        upper_limit, lower_limit, low_value_level = set_the_upper_and_lower_limits(basic_info, percentile_95_5,
+                                                                                   percentile_95_10, relative_std)
 
         if not merged_df.empty:
             # 画图
-            draw_a_graph(merged_df, basic_info['药品名称'], basic_info['规格'], percentile_95_5=round(percentile_95_5, 2),
-                         percentile_95_10=round(percentile_95_10, 2), relative_std= round(relative_std, 2),
-                         inventory_cap_for_low_value_drugs= round(inventory_cap_for_low_value_drugs, 2) if inventory_cap_for_low_value_drugs else None,
-                         inventory_floor_for_low_value_drugs= round(inventory_floor_for_low_value_drugs, 2) if inventory_floor_for_low_value_drugs else None)
+            draw_a_graph(merged_df, basic_info['药品名称'], basic_info['规格'],
+                         low_value_level=low_value_level, relative_std=round(relative_std, 2),
+                         upper_limit=round(upper_limit, 2), lower_limit=round(lower_limit, 2))
 
             # 导出图片
-            export_img(basic_info['药品名称'], basic_info['规格'])
+            export_img(file_name, basic_info['药品名称'], basic_info['规格'])
 
-            return {'药品名称': basic_info['药品名称'],
+            return {'文件名': file_name,
+                    '药品名称': basic_info['药品名称'],
                     '规格': basic_info['规格'],
                     '单位': basic_info['单位'],
                     '厂家': basic_info['厂家'],
-                    '日均销量': round(daily_avg_sales, 2),
-                    '拟设上限': round(inventory_cap_for_low_value_drugs, 2) if inventory_cap_for_low_value_drugs else round(percentile_95_10, 2),
-                    '拟设下限': round(inventory_floor_for_low_value_drugs, 2) if inventory_floor_for_low_value_drugs else round(percentile_95_5, 2),
-                    '相对标准差': round(relative_std, 2),
+                    '拟设下限': round(lower_limit, 2),
+                    '拟设上限': round(upper_limit, 2),
+                    '销量价值': '极低值' if low_value_level == 1 else '低值' if low_value_level == 2 else None,
+                    '销量波动': '高波动' if relative_std > 3 else '中波动' if relative_std > 1 else '低波动',
                     '库存天数': round(daily_avg_stock / daily_avg_sales, 2),
+                    '日均销量': round(daily_avg_sales, 2),
                     '起始日期': merged_df['操作日期'].min(),
-                    '结束日期': merged_df['操作日期'].max()}
+                    '结束日期': merged_df['操作日期'].max(),
+                    # '用药天数占比': round(merged_df['用药天数占比'].sum(), 2),
+                    }
 
     else:
-        print(f"{basic_info['药品名称']}_{basic_info['规格']}没有住院摆药记录!")
+        app_logger.info(f"{basic_info['药品名称']}_{basic_info['规格']}没有住院摆药记录!")
+
+
+def set_the_upper_and_lower_limits(basic_info, percentile_95_5, percentile_95_10,
+                                   relative_std):
+    # 针对低价值的药品，设置库存上下限与低价值级别：0（非低价值）、1（极低价值）、2（低价值）
+    if abs(percentile_95_10 * basic_info['购入金额']) < 500:
+        upper_limit = percentile_95_10 * 1.5
+        lower_limit = percentile_95_5 * 1.5
+        low_value_level = 1
+    elif abs(percentile_95_10 * basic_info['购入金额']) < 1000:
+        upper_limit = percentile_95_10 * 1.3
+        lower_limit = percentile_95_5 * 1.3
+        low_value_level = 2
+    else:
+        low_value_level = 0
+        # 针对非低价值,通过波动性设置上下限
+        if relative_std > 3:
+            upper_limit = percentile_95_10 * 1.3
+            lower_limit = percentile_95_5 * 1.3
+        elif relative_std > 1:
+            upper_limit = percentile_95_10 * 1.2
+            lower_limit = percentile_95_5 * 1.2
+        else:
+            upper_limit = percentile_95_10 * 1.1
+            lower_limit = percentile_95_5 * 1.1
+    return upper_limit, lower_limit, low_value_level
 
 
 def draw_a_graph(df, drug_name, unit, **kwargs):
-
     # 设置matplotlib字体为通用字体
     plt.rcParams['font.sans-serif'] = ['SimHei']
     plt.rcParams['axes.unicode_minus'] = False
@@ -126,20 +162,25 @@ def draw_a_graph(df, drug_name, unit, **kwargs):
 
     # 绘制折线图
     plt.plot(df['操作日期'], df['当日销量'], color='red', label='当日销量')
-    plt.plot(df['操作日期'], df['近5日累计销量'], color='orange', label='近5日累计销量')
+    plt.plot(df['操作日期'], df['近5日累计销量'], color='blue', label='近5日累计销量')
     plt.plot(df['操作日期'], df['近10日累计销量'], color='green', label='近10日累计销量')
 
     # 添加水平线
-    if kwargs.get('inventory_cap_for_low_value_drugs'):
-        plt.axhline(y=kwargs.get('inventory_cap_for_low_value_drugs'), color='purple', linestyle='--', label='低值药品上限')
-        plt.axhline(y=kwargs.get('inventory_floor_for_low_value_drugs'), color='blue', linestyle='--', label='低值药品下限')
-    else:
-        plt.axhline(y=kwargs.get('percentile_95_10'), color='purple', linestyle='--', label='拟设上限')
-        plt.axhline(y=kwargs.get('percentile_95_5'), color='blue', linestyle='--', label='拟设下限')
+    plt.axhline(y=kwargs.get('lower_limit'), color='blue', linestyle='--', label='拟设下限')
+    plt.axhline(y=kwargs.get('upper_limit'), color='green', linestyle='--', label='拟设上限')
 
-    # 显示相对标准差
-    plt.text(df['操作日期'].iloc[-1], df['日结库存'].iloc[-1], f'相对标准差：{kwargs.get("relative_std"):.2f}', ha='right',
-             va='bottom')
+    # 显示文字：销量价值（用“低值”、“极低值”表示）和波动情况（用“高波动”、“中波动”、“低波动”表示）
+    if kwargs.get('low_value_level') == 1:
+        plt.text(df['操作日期'].iloc[-1], df['日结库存'].iloc[-1], f'销量价值：极低值', ha='right', va='center')
+    elif kwargs.get('low_value_level') == 2:
+        plt.text(df['操作日期'].iloc[-1], df['日结库存'].iloc[-1], f'销量价值：低值', ha='right', va='center')
+    else:
+        if kwargs.get('relative_std') > 3:
+            plt.text(df['操作日期'].iloc[-1], df['日结库存'].iloc[-1], f'波动情况：高波动', ha='right', va='center')
+        elif kwargs.get('relative_std') > 1:
+            plt.text(df['操作日期'].iloc[-1], df['日结库存'].iloc[-1], f'波动情况：中波动', ha='right', va='center')
+        else:
+            plt.text(df['操作日期'].iloc[-1], df['日结库存'].iloc[-1], f'波动情况：低波动', ha='right', va='center')
 
     # 设置图表标题和坐标轴标签
     plt.title(f'{drug_name}库存与销量分析（单位：{unit}）')
@@ -159,11 +200,11 @@ def draw_a_graph(df, drug_name, unit, **kwargs):
     # plt.show()
 
 
-def export_img(drug_name, drug_specifications):
+def export_img(file_name, drug_name, drug_specifications):
     # 确保所有父文件夹都存在
     os.makedirs(export_path, exist_ok=True)
     # 导出图片命名
-    export_img_file_name = f"{drug_name}_{drug_specifications}"  # 使用下划线连接药物名称和规格
+    export_img_file_name = f"{file_name}_{drug_name}_{drug_specifications}"  # 使用下划线连接药物名称和规格
     # 定义非法字符列表
     illegal_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|']
     # 遍历非法字符列表，将每个非法字符替换为下划线
@@ -182,16 +223,18 @@ if __name__ == '__main__':
     # 过滤出Excel文件
     excel_files = [file for file in all_files if file.endswith(('.xlsx', '.xls'))]
     # 按文件名中的数字部分排序
-    sorted_excel_files = sorted(excel_files, key=lambda x: int(x.split('.')[0]))
+    sorted_excel_files = sorted(excel_files, key=lambda x: str(x.split('.')[0]))
 
     # 遍历所有Excel文件
     results = []
     for filename in sorted_excel_files:
         file_path = os.path.join(directory_path, filename)
-        result = process_excel(file_path)
-        # 如果结果不为空，则添加到结果列表中
-        if result:
-            results.append(result)
+        try:
+            result = process_excel(file_path)
+            if result:
+                results.append(result)
+        except Exception as e:
+            error_logger.error(f"处理文件 {filename} 时发生错误: {e}")
 
     # 将结果写入日志文件
     app_logger.info(f"信息汇总（含库存上下限）:\n{results}")
@@ -199,5 +242,7 @@ if __name__ == '__main__':
     df = pd.DataFrame.from_records(results)
     # 将DataFrame写入Excel文件，不包括索引号
     export_xls_file = os.path.join(export_path, f"药品库存上下限.xlsx")
+    # 确保所有父文件夹都存在
+    os.makedirs(export_path, exist_ok=True)
     df.to_excel(export_xls_file, index=False)
     app_logger.info(f"导出文件: {export_xls_file}")
