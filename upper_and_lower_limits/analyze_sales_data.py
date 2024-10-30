@@ -1,5 +1,4 @@
 import os
-import time
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -44,8 +43,12 @@ def analyze_sales_data(sales_info, start_date=None, end_date=None):  # start_dat
     zero_sales_days_ratio = zero_sales_days / sales_df.shape[0]
 
     # 设置库存上下限
-    upper_limit, lower_limit, value_level = set_the_upper_and_lower_limits(basic_info, percentile_95_7,
-                                                                           percentile_95_10, relative_std)
+    upper_limit, lower_limit, value_level = set_the_upper_and_lower_limits(basic_info,
+                                                                           percentile_95_5=percentile_95_5,
+                                                                           percentile_95_7=percentile_95_7,
+                                                                           percentile_95_10=percentile_95_10,
+                                                                           relative_std=relative_std,
+                                                                           zero_sales_days_ratio=zero_sales_days_ratio)
 
     if not sales_df.empty:
         # 画图
@@ -73,9 +76,16 @@ def analyze_sales_data(sales_info, start_date=None, end_date=None):  # start_dat
                 }
 
 
-def set_the_upper_and_lower_limits(basic_info, percentile_95_7, percentile_95_10, relative_std):
+def set_the_upper_and_lower_limits(basic_info, **kwargs):
     price = abs(basic_info['购入金额'])
+    percentile_95_5 = kwargs.get('percentile_95_5')
+    percentile_95_7 = kwargs.get('percentile_95_7')
+    percentile_95_10 = kwargs.get('percentile_95_10')
+    relative_std = kwargs.get('relative_std')
+    zero_sales_days_ratio = kwargs.get('zero_sales_days_ratio')
+
     # 针对10日销售额P95，分段设置上下限
+    value_level = 0
     if percentile_95_10 * price < 500:
         value_level = 1
         upper_limit = percentile_95_10 * 1.5
@@ -88,8 +98,8 @@ def set_the_upper_and_lower_limits(basic_info, percentile_95_7, percentile_95_10
 
     elif percentile_95_10 * price > 50000:
         value_level = 5
-        upper_limit = percentile_95_10 * 0.9 if percentile_95_10 * 0.9 > percentile_95_7 else percentile_95_7 + 1
-        lower_limit = percentile_95_7
+        upper_limit = percentile_95_7
+        lower_limit = percentile_95_5
 
     elif percentile_95_10 * price > 10000:
         value_level = 4
@@ -112,6 +122,10 @@ def set_the_upper_and_lower_limits(basic_info, percentile_95_7, percentile_95_10
 
 
 def draw_a_graph(df, drug_name, unit, **kwargs):
+    value_level = kwargs.get('value_level')
+    upper_limit = kwargs.get('upper_limit')
+    lower_limit = kwargs.get('lower_limit')
+
     # 设置matplotlib字体为通用字体
     plt.rcParams['font.sans-serif'] = ['SimHei']
     plt.rcParams['axes.unicode_minus'] = False
@@ -122,30 +136,34 @@ def draw_a_graph(df, drug_name, unit, **kwargs):
 
     # 绘制折线图
     plt.plot(df['操作日期'], df['当日销量'], color='red', label='当日销量')
-    # plt.plot(df['操作日期'], df['近5日累计销量'], color='purple', label='近5日累计销量')
-    plt.plot(df['操作日期'], df['近7日累计销量'], color='blue', label='近7日累计销量')
-    plt.plot(df['操作日期'], df['近10日累计销量'], color='green', label='近10日累计销量')
+    if value_level == 5:
+        plt.plot(df['操作日期'], df['近5日累计销量'], color='blue', label='近5日累计销量')
+        plt.plot(df['操作日期'], df['近7日累计销量'], color='green', label='近7日累计销量')
+    else:
+        plt.plot(df['操作日期'], df['近7日累计销量'], color='blue', label='近7日累计销量')
+        plt.plot(df['操作日期'], df['近10日累计销量'], color='green', label='近10日累计销量')
 
-    # 添加水平线
-    plt.axhline(y=kwargs.get('lower_limit'), color='blue', linestyle='--', label='拟设下限')
-    plt.axhline(y=kwargs.get('upper_limit'), color='green', linestyle='--', label='拟设上限')
+    # 添加水平线及其数值
+    plt.axhline(y=lower_limit, color='blue', linestyle='--')
+    plt.axhline(y=upper_limit, color='green', linestyle='--')
+    plt.text(df['操作日期'].iloc[-1], lower_limit * 0.95, f'拟设下限：{lower_limit:.2f}', ha='left', va='center')
+    plt.text(df['操作日期'].iloc[-1], upper_limit * 1.05, f'拟设上限：{upper_limit:.2f}', ha='left', va='center')
 
     # 显示文字
-    value_level = kwargs.get('value_level', '未知')  # 默认为'未知'
     if value_level == 1:
-        text = '10日销售额P95：\n极低值'
+        text = '10日销售额：极低值'
     elif value_level == 2:
-        text = '10日销售额P95：\n低值'
+        text = '10日销售额：低值'
     elif value_level == 3:
-        text = '10日销售额P95：\n中等值'
+        text = '10日销售额：中等值'
     elif value_level == 4:
-        text = '10日销售额P95：\n高值'
+        text = '10日销售额：高值'
     elif value_level == 5:
-        text = '10日销售额P95：\n极高值'
+        text = '10日销售额：极高值'
     else:
-        text = '10日销售额P95：\n未知'
+        text = '10日销售额：未知'
 
-    plt.text(df['操作日期'].iloc[-1], df['日结库存'].iloc[-1], text, ha='left', va='center')
+    plt.text(df['操作日期'].iloc[-1], (upper_limit + lower_limit) / 2, text, ha='left', va='center')
 
     # 设置图表标题和坐标轴标签
     plt.title(f'{drug_name}库存与销量分析（单位：{unit}）')
