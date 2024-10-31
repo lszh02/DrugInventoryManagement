@@ -59,13 +59,13 @@ def analyze_sales_data(sales_info, start_date=None, end_date=None):  # start_dat
         export_img(file_name, basic_info['药品名称'], basic_info['规格'])
 
         return {'文件名': file_name,
+                '自定义码': basic_info['自定义码'],
                 '药品名称': basic_info['药品名称'],
                 '规格': basic_info['规格'],
                 '单位': basic_info['单位'],
-                '厂家': basic_info['厂家'],
                 '拟设下限': round(lower_limit, 2),
                 '拟设上限': round(upper_limit, 2),
-                '10日销售额P95': round(percentile_95_10 * abs(basic_info['购入金额']), 2),
+                '10日销售额P95': round(percentile_95_10 * abs(basic_info['购入金额'] / basic_info['入出库数量']), 2),
                 '销量价值等级': value_level,
                 '销量波动': round(relative_std, 2),
                 '库存天数': round(daily_avg_stock / daily_avg_sales, 2),
@@ -77,47 +77,52 @@ def analyze_sales_data(sales_info, start_date=None, end_date=None):  # start_dat
 
 
 def set_the_upper_and_lower_limits(basic_info, **kwargs):
-    price = abs(basic_info['购入金额'])
+    price = abs(basic_info['购入金额'] / basic_info['入出库数量'])
     percentile_95_5 = kwargs.get('percentile_95_5')
     percentile_95_7 = kwargs.get('percentile_95_7')
     percentile_95_10 = kwargs.get('percentile_95_10')
     relative_std = kwargs.get('relative_std')
     zero_sales_days_ratio = kwargs.get('zero_sales_days_ratio')
 
-    # 针对10日销售额P95，分段设置上下限
-    value_level = 0
-    if percentile_95_10 * price < 500:
+    # 基于10日销售额P95，分段设置上下限
+    if 0 < percentile_95_10 * price < 1000:
         value_level = 1
-        upper_limit = percentile_95_10 * 1.5
-        lower_limit = percentile_95_7 * 1.5
-
-    elif percentile_95_10 * price < 1000:
-        value_level = 2
         upper_limit = percentile_95_10 * 1.3
         lower_limit = percentile_95_7 * 1.3
+
+    elif 1000 <= percentile_95_10 * price < 5000:
+        value_level = 2
+        upper_limit = percentile_95_10 * 1.2
+        lower_limit = percentile_95_7 * 1.2
+
+    elif 5000 <= percentile_95_10 * price < 10000:
+        value_level = 3
+        upper_limit = percentile_95_10 * 1.1
+        lower_limit = percentile_95_7 * 1.1
+
+    elif 10000 <= percentile_95_10 * price < 50000:
+        value_level = 4
+        upper_limit = percentile_95_10
+        lower_limit = percentile_95_7
 
     elif percentile_95_10 * price > 50000:
         value_level = 5
         upper_limit = percentile_95_7
         lower_limit = percentile_95_5
 
-    elif percentile_95_10 * price > 10000:
-        value_level = 4
-        upper_limit = percentile_95_10
-        lower_limit = percentile_95_7
     else:
-        value_level = 3
-        upper_limit = percentile_95_10 * 1.1
-        lower_limit = percentile_95_7 * 1.1
+        value_level = 0
+        upper_limit = 0
+        lower_limit = 0
 
-        # 针对中等价值,通过波动性设置上下限
-        # if relative_std > 3:
-        #     upper_limit = percentile_95_10 * 1.3
-        #     lower_limit = percentile_95_7 * 1.3
-        # elif relative_std > 1:
-        #     upper_limit = percentile_95_10 * 1.2
-        #     lower_limit = percentile_95_7 * 1.2
-        # else:
+    # 针对中等价值,通过波动性设置上下限
+    # if relative_std > 3:
+    #     upper_limit = percentile_95_10 * 1.3
+    #     lower_limit = percentile_95_7 * 1.3
+    # elif relative_std > 1:
+    #     upper_limit = percentile_95_10 * 1.2
+    #     lower_limit = percentile_95_7 * 1.2
+    # else:
     return upper_limit, lower_limit, value_level
 
 
