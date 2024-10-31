@@ -25,7 +25,7 @@ def extract_sales_info(file_path, start_date=None, end_date=None):
     df = pd.read_excel(file_path)
 
     # 提取药品基本信息(基于最后一行数据)
-    basic_info = df[['药品名称', '规格', '单位', '购入金额', '厂家']].iloc[-1]
+    basic_info = df[['自定义码', '药品名称', '规格', '单位', '入出库数量', '购入金额']].iloc[-1]
 
     # 选择需要的列
     selected_columns = ['类型', '入出库数量', '库存量', '操作日期']
