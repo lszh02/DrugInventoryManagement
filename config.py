@@ -5,8 +5,8 @@ directory_path = r'D:\药事\5.降低静配中心药品供应短缺率\消耗记
 export_path = r'D:\药事\5.降低静配中心药品供应短缺率\汇总记录'
 
 # 设置日志文件路径
-app_log_path = os.path.join(export_path, "app.log")
-error_log_path = os.path.join(export_path, "errors.log")
+app_log_path = os.path.join(os.path.dirname(__file__), "app.log")
+error_log_path = os.path.join(os.path.dirname(__file__), "errors.log")
 
 # 配置应用日志格式和输出
 app_logger = loguru.logger
