@@ -29,7 +29,7 @@ def extract_sales_info(file_path, start_date=None, end_date=None):
 
     # 选择需要的列
     selected_columns = ['类型', '入出库数量', '库存量', '操作日期']
-    df = df[selected_columns].copy()
+    df = df[selected_columns].copy().dropna()
 
     # 将“操作日期”列转换为日期格式
     df['操作日期'] = pd.to_datetime(df['操作日期']).dt.date
@@ -71,9 +71,10 @@ def extract_sales_info(file_path, start_date=None, end_date=None):
 
         return {'文件名': file_name,
                 '药品基本信息': basic_info,
-                '销量信息': merged_df
+                '销量数据': merged_df
                 }
 
     else:
-        app_logger.info(f"{basic_info['药品名称']}_{basic_info['规格']}没有住院摆药记录!")
+        app_logger.info(f"{basic_info['药品名称']}_{basic_info['规格']}没有住院摆药记录!文件名：{file_name}")
         return None
+
