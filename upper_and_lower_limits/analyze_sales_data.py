@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -14,45 +15,51 @@ pd.set_option('display.unicode.east_asian_width', True)  # 设置输出右对齐
 def analyze_sales_data(sales_info, start_date=None, end_date=None):  # start_date和end_date为空时，默认分析所有数据
     file_name = sales_info.get('文件名')
     basic_info = sales_info.get('药品基本信息')
-    sales_df = sales_info.get('销量信息')
+    sales_df = sales_info.get('销量数据')
 
     app_logger.info(f"开始分析药品: {basic_info.get('药品名称')} 的销售数据，文件名: {file_name}")
 
+    # 筛选出在start_date和end_date之间的数据
+    start_date = max(datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else sales_df['操作日期'].min(),
+                     sales_df['操作日期'].min())
+    end_date = min(datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else sales_df['操作日期'].max(),
+                   sales_df['操作日期'].max())
+    filtered_df = sales_df[(sales_df['操作日期'] >= start_date) & (sales_df['操作日期'] <= end_date)]
+
     # 计算近5日日均销量、累计销量及其95百分位数
-    sales_df['近5日日均销量'] = sales_df['当日销量'].rolling(window=5, min_periods=1).mean()
-    sales_df['近5日累计销量'] = sales_df['当日销量'].rolling(window=5, min_periods=1).sum()
-    percentile_95_5 = sales_df['近5日累计销量'].quantile(0.95)
+    filtered_df['近5日日均销量'] = filtered_df['当日销量'].rolling(window=5, min_periods=1).mean()
+    filtered_df['近5日累计销量'] = filtered_df['当日销量'].rolling(window=5, min_periods=1).sum()
+    percentile_95_5 = filtered_df['近5日累计销量'].quantile(0.95)
 
     # 计算近7日日均销量、累计销量及其95百分位数
-    sales_df['近7日日均销量'] = sales_df['当日销量'].rolling(window=7, min_periods=1).mean()
-    sales_df['近7日累计销量'] = sales_df['当日销量'].rolling(window=7, min_periods=1).sum()
-    percentile_95_7 = sales_df['近7日累计销量'].quantile(0.95)
+    filtered_df['近7日日均销量'] = filtered_df['当日销量'].rolling(window=7, min_periods=1).mean()
+    filtered_df['近7日累计销量'] = filtered_df['当日销量'].rolling(window=7, min_periods=1).sum()
+    percentile_95_7 = filtered_df['近7日累计销量'].quantile(0.95)
 
     # 计算近10日日均销量、累计销量及其95百分位数
-    sales_df['近10日日均销量'] = sales_df['当日销量'].rolling(window=10, min_periods=1).mean()
-    sales_df['近10日累计销量'] = sales_df['当日销量'].rolling(window=10, min_periods=1).sum()
-    percentile_95_10 = sales_df['近10日累计销量'].quantile(0.95)
+    filtered_df['近10日日均销量'] = filtered_df['当日销量'].rolling(window=10, min_periods=1).mean()
+    filtered_df['近10日累计销量'] = filtered_df['当日销量'].rolling(window=10, min_periods=1).sum()
+    percentile_95_10 = filtered_df['近10日累计销量'].quantile(0.95)
 
-    # 计算sales_df中当日销量的相对标准差
-    daily_avg_stock = sales_df['日结库存'].mean()  # 日均库存
-    daily_avg_sales = sales_df['当日销量'].mean()  # 日均销量
-    relative_std = sales_df['当日销量'].std() / daily_avg_sales
+    # 如果筛选出的数据不为空，则进行后续分析
+    if not filtered_df.empty:
+        daily_avg_stock = filtered_df['日结库存'].mean()  # 日均库存
+        daily_avg_sales = filtered_df['当日销量'].mean()  # 日均销量
+        relative_std = filtered_df['当日销量'].std() / daily_avg_sales  # 相对标准差
 
-    # 0销量天数占比
-    zero_sales_days = sales_df[sales_df['当日销量'] == 0].shape[0]
-    zero_sales_days_ratio = zero_sales_days / sales_df.shape[0]
+        # 0销量天数占比
+        zero_sales_days = filtered_df[filtered_df['当日销量'] == 0].shape[0]
+        zero_sales_days_ratio = zero_sales_days / filtered_df.shape[0]
 
-    # 设置库存上下限
-    upper_limit, lower_limit, value_level = set_the_upper_and_lower_limits(basic_info,
-                                                                           percentile_95_5=percentile_95_5,
-                                                                           percentile_95_7=percentile_95_7,
-                                                                           percentile_95_10=percentile_95_10,
-                                                                           relative_std=relative_std,
-                                                                           zero_sales_days_ratio=zero_sales_days_ratio)
-
-    if not sales_df.empty:
+        # 设置库存上下限
+        upper_limit, lower_limit, value_level = set_the_upper_and_lower_limits(basic_info,
+                                                                               percentile_95_5=percentile_95_5,
+                                                                               percentile_95_7=percentile_95_7,
+                                                                               percentile_95_10=percentile_95_10,
+                                                                               relative_std=relative_std,
+                                                                               zero_sales_days_ratio=zero_sales_days_ratio)
         # 画图
-        draw_a_graph(sales_df, basic_info['药品名称'], basic_info['规格'], value_level=value_level,
+        draw_a_graph(filtered_df, basic_info['药品名称'], basic_info['规格'], value_level=value_level,
                      upper_limit=round(upper_limit, 2), lower_limit=round(lower_limit, 2))
 
         # 导出图片
@@ -71,8 +78,8 @@ def analyze_sales_data(sales_info, start_date=None, end_date=None):  # start_dat
                 '库存天数': round(daily_avg_stock / daily_avg_sales, 2),
                 '日均销量': round(daily_avg_sales, 2),
                 '0销量天数占比': zero_sales_days_ratio,
-                '起始日期': sales_df['操作日期'].min(),
-                '结束日期': sales_df['操作日期'].max(),
+                '起始日期': start_date,
+                '结束日期': end_date
                 }
 
 
@@ -231,7 +238,7 @@ if __name__ == '__main__':
     # 分析销量数据并导出结果
     results = []
     for sale_info in sales_data:
-        result = analyze_sales_data(sale_info)
+        result = analyze_sales_data(sale_info, '2023-04-01', '2023-11-30')
         if result:
             results.append(result)
     app_logger.info(f"分析销量数据，完成！")
