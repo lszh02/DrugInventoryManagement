@@ -1,27 +1,19 @@
+# encoding=utf-8
 import os
+from datetime import datetime
 
 import pandas as pd
 
 from config import app_logger, error_logger
 
+pd.set_option('expand_frame_repr', False)  # 当列太多时显示不清楚
+pd.set_option('display.unicode.east_asian_width', True)  # 设置输出右对齐
 
-def extract_sales_info(file_path, start_date=None, end_date=None):
-    """提取销量信息
 
-    Args:
-        file_path (str): Excel文件路径
-        start_date (str, optional): 开始日期. Defaults to None.
-        end_date (str, optional): 结束日期. Defaults to None.
-
-    Returns:
-        DataFrame: 包含销量信息的DataFrame
-    """
-
-    # 提取Excel文件名
+def extract_sales_data(file_path, start_date=None, end_date=None):
     file_name = os.path.basename(file_path)
     app_logger.info(f"开始提取销量信息: {file_name}")
 
-    # 读取Excel文件
     df = pd.read_excel(file_path)
 
     # 提取药品基本信息(基于最后一行数据)
@@ -41,19 +33,21 @@ def extract_sales_info(file_path, start_date=None, end_date=None):
             lambda x: -x).reset_index()
         daily_sales.rename(columns={'入出库数量': '当日销量'}, inplace=True)
 
-        # 按照操作日期分组，并计算每日的结余库存量
+        # 按照操作日期分组，并计算日结库存/当日最低库存
         daily_last_stock = df.groupby('操作日期')['库存量'].last().reset_index()
         daily_last_stock.rename(columns={'库存量': '日结库存'}, inplace=True)
+        # daily_min_stock = df.groupby('操作日期')['库存量'].min().reset_index()
+        # daily_min_stock.rename(columns={'库存量': '当日最低库存'}, inplace=True)
 
         # 合并日结库存和每日销量的数据
         merged_df = pd.merge(daily_sales, daily_last_stock, on='操作日期', how='outer')
 
-        # 生成一个包含所有日期的序列(从开始日期到结束日期)
-        if start_date is None:
-            start_date = merged_df['操作日期'].min()
-        if end_date is None:
-            end_date = merged_df['操作日期'].max()
-
+        # 生成一个包含起止日期的序列
+        start_date = max(
+            datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else merged_df['操作日期'].min(),
+            merged_df['操作日期'].min())
+        end_date = min(datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else merged_df['操作日期'].max(),
+                       merged_df['操作日期'].max())
         all_dates = pd.date_range(start=start_date, end=end_date, freq='D')
 
         # 将 '操作日期' 列转换为日期时间格式,才能作为键进行合并
@@ -65,6 +59,7 @@ def extract_sales_info(file_path, start_date=None, end_date=None):
 
         # 使用前一个有效值填充每日最低库存的缺失值
         merged_df['日结库存'] = merged_df['日结库存'].ffill()
+        # merged_df['当日最低库存'] = merged_df['当日最低库存'].ffill()
 
         # 使用0填充每日销量的缺失值
         merged_df['当日销量'] = merged_df['当日销量'].fillna(0)
@@ -75,6 +70,8 @@ def extract_sales_info(file_path, start_date=None, end_date=None):
                 }
 
     else:
-        app_logger.info(f"{basic_info['药品名称']}_{basic_info['规格']}没有住院摆药记录!文件名：{file_name}")
-        return None
+        app_logger.info(
+            f"警告：选定周期内，{basic_info['药品名称']}_{basic_info['规格']}没有住院摆药记录!文件名：{file_name}")
+        return {'error': f"警告：选定周期内，{basic_info['药品名称']}_{basic_info['规格']}没有住院摆药记录!"}
+
 
