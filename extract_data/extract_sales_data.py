@@ -81,8 +81,7 @@ def extract_sales_data(file_path, start_date=None, end_date=None):
         merged_df = merge_and_fillna(daily_sales, daily_last_stock, start_date, end_date)
         return {'文件名': file_name, '药品基本信息': basic_info, '销量数据': merged_df}
     else:
-        app_logger.warning(
-            f"警告：选定周期内，{basic_info['药品名称']}_{basic_info['规格']}没有住院摆药记录!文件名：{file_name}")
+        app_logger.warning(f"警告：{basic_info['药品名称']}_{basic_info['规格']}在{start_date}到{end_date}期间没有住院摆药记录!文件名：{file_name}")
         return None
 
 
