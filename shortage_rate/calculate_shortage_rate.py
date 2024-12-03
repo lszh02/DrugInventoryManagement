@@ -7,18 +7,16 @@ import matplotlib.dates as mdates
 
 from config import directory_path, export_path, app_logger, error_logger
 from extract_data.extract_sales_data import extract_sales_data
+from utils import filter_date_range
 
 pd.set_option('expand_frame_repr', False)  # 当列太多时显示不清楚
 pd.set_option('display.unicode.east_asian_width', True)  # 设置输出右对齐
 
 
 def calculate_shortage_rate(sales_df, start_date=None, end_date=None):  # start_date和end_date为空时，默认分析所有数据
-    # 确定筛选日期范围
-    start_date = max(datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else sales_df['操作日期'].min(),
-                     sales_df['操作日期'].min())
-    end_date = min(datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else sales_df['操作日期'].max(),
-                   sales_df['操作日期'].max())
-    filtered_df = sales_df[(sales_df['操作日期'] >= start_date) & (sales_df['操作日期'] <= end_date)]
+    """计算短缺率"""
+    # 筛选日期范围
+    filtered_df, start_date, end_date = filter_date_range(sales_df, start_date, end_date)
 
     # 检查筛选后的数据是否为空
     if filtered_df.empty:

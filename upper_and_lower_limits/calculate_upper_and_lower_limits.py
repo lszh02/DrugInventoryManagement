@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 from config import directory_path, export_path, app_logger, error_logger
-from extract_sales_info import extract_sales_info
+from extract_data.extract_sales_data import extract_sales_data
 
 pd.set_option('expand_frame_repr', False)  # 当列太多时显示不清楚
 pd.set_option('display.unicode.east_asian_width', True)  # 设置输出右对齐
@@ -228,7 +228,7 @@ if __name__ == '__main__':
     for filename in sorted_excel_files:
         file_path = os.path.join(directory_path, filename)
         try:
-            result = extract_sales_info(file_path)
+            result = extract_sales_data(file_path)
             if result:
                 sales_data.append(result)
         except Exception as e:

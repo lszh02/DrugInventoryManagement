@@ -5,17 +5,10 @@ from datetime import datetime
 import pandas as pd
 
 from config import app_logger, error_logger
+from utils import filter_date_range, read_excel_file
 
 pd.set_option('expand_frame_repr', False)  # 当列太多时显示不清楚
 pd.set_option('display.unicode.east_asian_width', True)  # 设置输出右对齐
-
-
-def read_excel_file(file_path):
-    try:
-        return pd.read_excel(file_path)
-    except Exception as e:
-        app_logger.error(f"读取文件 {file_path} 时发生错误: {e}")
-        return None
 
 
 def extract_basic_info(df):
@@ -73,15 +66,21 @@ def extract_sales_data(file_path, start_date=None, end_date=None):
     if '住院摆药' in df['类型'].values:
         daily_sales = calculate_daily_sales(df)
         daily_last_stock = calculate_daily_stock(df)
-        start_date = max(
-            datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else daily_sales['操作日期'].min(),
-            daily_sales['操作日期'].min())
-        end_date = min(datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else daily_sales['操作日期'].max(),
-                       daily_sales['操作日期'].max())
+        _, start_date, end_date = filter_date_range(daily_sales, start_date, end_date)
+
         merged_df = merge_and_fillna(daily_sales, daily_last_stock, start_date, end_date)
         return {'文件名': file_name, '药品基本信息': basic_info, '销量数据': merged_df}
     else:
-        app_logger.warning(f"警告：{basic_info['药品名称']}_{basic_info['规格']}在{start_date}到{end_date}期间没有住院摆药记录!文件名：{file_name}")
+        app_logger.warning(
+            f"警告：{basic_info['药品名称']}_{basic_info['规格']}在{start_date}到{end_date}期间没有住院摆药记录!文件名：{file_name}")
         return None
 
 
+if __name__ == '__main__':
+    # 测试代码
+    file_name = r'D:\个人文件\张思龙\1.药事\5.降低静配中心药品供应短缺率\0消耗记录\202303_202402\155.xls'
+    start_date = '2023-03-01'
+    end_date = '2023-11-30'
+    # start_date = None
+    # end_date = None
+    print(extract_sales_data(file_name, start_date, end_date))
