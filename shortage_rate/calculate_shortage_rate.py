@@ -83,9 +83,9 @@ if __name__ == '__main__':
     end_date = '2024-11-30'
     results = []
 
-    # 获取所有文件，过滤出Excel文件
+    # 获取所有Excel文件,并剔除文件名中包含下划线"_"的文件（因行数达到.xls文件上限而分割的文件）
     all_files = os.listdir(directory_path)
-    excel_files = [file for file in all_files if file.endswith(('.xlsx', '.xls'))]
+    excel_files = [file for file in all_files if file.endswith(('.xlsx', '.xls')) and '_' not in file]
 
     # 按文件名中的数字部分排序
     try:
