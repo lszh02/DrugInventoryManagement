@@ -6,11 +6,11 @@ import pandas as pd
 from config import app_logger
 
 
-def read_excel_file(file_path, max_rows=65535):
+def read_excel_file(file_path, max_rows=60000):
     try:
         df = pd.read_excel(file_path)
         if len(df) >= max_rows:
-            app_logger.warning(f"文件 {file_path} 的行数超过 {max_rows}，请选择续读文件")
+            app_logger.warning(f"文件 {file_path} 的行数超过 {max_rows}，将尝试续读文件")
             return continue_read_excel_file(file_path, df, max_rows)
         return df
     except Exception as e:
@@ -30,22 +30,29 @@ def continue_read_excel_file(file_path, df, max_rows):
 
     try:
         next_suffix = str(int(suffix) + 1).zfill(len(suffix))
-        new_file_name = f"{base_name_without_extension}_{next_suffix}.xls"
+        # 查找最后一个下划线位置
+        last_underscore_index = base_name_without_extension.rfind('_')
+        if last_underscore_index == -1:
+            new_file_name = f"{base_name_without_extension}_{next_suffix}.xls"
+        else:
+            new_file_name = f"{base_name_without_extension[:last_underscore_index]}_{next_suffix}.xls"
         new_file_path = os.path.join(directory, new_file_name)
 
         if not os.path.exists(new_file_path):
             app_logger.info(f"文件 {new_file_path} 不存在，停止续读")
             return df
 
+        app_logger.info(f"续读文件 {new_file_path}，将拼接到{file_path}后面")
         new_df = pd.read_excel(new_file_path)
         df = pd.concat([df, new_df], ignore_index=True)
 
         if len(new_df) >= max_rows:
-            continue_read_excel_file(new_file_path, df, max_rows)
+            app_logger.warning(f"文件 {new_file_path} 的行数超过 {max_rows}，将尝试续读文件")
+            return continue_read_excel_file(new_file_path, df, max_rows)
         else:
             return df
     except Exception as e:
-        app_logger.error(f"读取文件 {new_file_path} 时发生错误: {e}")
+        app_logger.error(f"续读文件时发生错误: {e}")
     return df
 
 
