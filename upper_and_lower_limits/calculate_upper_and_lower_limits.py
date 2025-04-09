@@ -7,6 +7,7 @@ import matplotlib.dates as mdates
 
 from config import directory_path, export_path, app_logger, error_logger
 from extract_data.extract_sales_data import extract_sales_data
+from utils import filter_date_range
 
 pd.set_option('expand_frame_repr', False)  # 当列太多时显示不清楚
 pd.set_option('display.unicode.east_asian_width', True)  # 设置输出右对齐
@@ -19,12 +20,15 @@ def analyze_sales_data(sales_info, start_date=None, end_date=None):  # start_dat
 
     app_logger.info(f"开始分析药品: {basic_info.get('药品名称')} 的销售数据，文件名: {file_name}")
 
-    # 筛选出在start_date和end_date之间的数据
-    start_date = max(datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else sales_df['操作日期'].min(),
-                     sales_df['操作日期'].min())
-    end_date = min(datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else sales_df['操作日期'].max(),
-                   sales_df['操作日期'].max())
-    filtered_df = sales_df[(sales_df['操作日期'] >= start_date) & (sales_df['操作日期'] <= end_date)]
+    # 筛选日期范围
+    filtered_df, start_date, end_date = filter_date_range(sales_df, start_date, end_date)
+
+    # # 筛选出在start_date和end_date之间的数据
+    # start_date = max(datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else sales_df['操作日期'].min(),
+    #                  sales_df['操作日期'].min())
+    # end_date = min(datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else sales_df['操作日期'].max(),
+    #                sales_df['操作日期'].max())
+    # filtered_df = sales_df[(sales_df['操作日期'] >= start_date) & (sales_df['操作日期'] <= end_date)]
 
     # 计算近5日日均销量、累计销量及其95百分位数
     filtered_df['近5日日均销量'] = filtered_df['当日销量'].rolling(window=5, min_periods=1).mean()
@@ -213,10 +217,10 @@ def export_img(file_name, drug_name, drug_specifications):
 
 
 if __name__ == '__main__':
-    # 获取所有文件
+    # 获取所有Excel文件,并剔除文件名中包含下划线"_"的文件（因行数达到.xls文件上限而分割的文件）
     all_files = os.listdir(directory_path)
-    # 过滤出Excel文件
-    excel_files = [file for file in all_files if file.endswith(('.xlsx', '.xls'))]
+    excel_files = [file for file in all_files if file.endswith(('.xlsx', '.xls')) and '_' not in file]
+
     # 按文件名中的数字部分排序
     try:
         sorted_excel_files = sorted(excel_files, key=lambda x: int(x.split('.')[0]))
@@ -238,7 +242,7 @@ if __name__ == '__main__':
     # 分析销量数据并导出结果
     results = []
     for sale_info in sales_data:
-        result = analyze_sales_data(sale_info, '2023-04-01', '2023-11-30')
+        result = analyze_sales_data(sale_info, '2024-01-01')
         if result:
             results.append(result)
     app_logger.info(f"分析销量数据，完成！")
@@ -247,6 +251,6 @@ if __name__ == '__main__':
     df = pd.DataFrame.from_records(results)
     # 导出结果到Excel文件
     os.makedirs(export_path, exist_ok=True)
-    export_xls_file = os.path.join(export_path, "销量分析结果.xlsx")
+    export_xls_file = os.path.join(export_path, "上下限分析结果.xlsx")
     df.to_excel(export_xls_file, index=False)
     app_logger.info(f"导出结果到: {export_xls_file}")
